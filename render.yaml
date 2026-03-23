@@ -1,11 +1,10 @@
 services:
   - type: web
     name: kaydiay-backend
-    runtime: node
-    rootDir: backend
-    buildCommand: npm install && npx prisma generate && npm run build
+    runtime: docker
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
     preDeployCommand: npx prisma db push
-    startCommand: npm start
     healthCheckPath: /health
     autoDeployTrigger: commit
     envVars:
