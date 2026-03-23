@@ -55,7 +55,7 @@ export const countAds = async (where: any) => {
 
 export const findAdByIdAndUser = async (adId: number, userId: number) => {
   return await prisma.ad.findFirst({
-    where: { id: adId, userId, status: 'active' }
+    where: { id: adId, userId, status: { not: 'deleted' } }
   });
 };
 

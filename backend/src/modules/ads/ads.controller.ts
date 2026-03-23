@@ -91,6 +91,61 @@ export const getAds = async (req: Request, res: Response) => {
    }
  };
 
+// Get current user's ads
+export const getMyAds = async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user;
+    if (!user) {
+      return res.status(401).json({ error: 'Non autorisé' });
+    }
+
+    const { page = 1, limit = 10, status, categoryId } = req.query;
+
+    const where: any = { userId: user.id };
+    if (status && status !== 'all') {
+      where.status = status;
+    }
+    if (categoryId) {
+      where.categoryId = parseInt(categoryId as string);
+    }
+
+    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+    const take = parseInt(limit as string);
+
+    const ads = await getAdsModel(where, skip, take);
+    const total = await countAds(where);
+
+    res.json({
+      ads,
+      pagination: {
+        page: parseInt(page as string),
+        limit: parseInt(limit as string),
+        total,
+        pages: Math.ceil(total / parseInt(limit as string))
+      }
+    });
+  } catch (error) {
+    console.error('Erreur dans getMyAds:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération de vos annonces' });
+  }
+};
+
+export const getAdById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const ad = await getAdsModel({ id: parseInt(id) }, 0, 1);
+    
+    if (ad.length === 0) {
+      return res.status(404).json({ error: 'Annonce non trouvée' });
+    }
+    
+    res.json({ ad: ad[0] });
+  } catch (error) {
+    console.error('Erreur dans getAdById:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération de l\'annonce' });
+  }
+};
+
 export const extendAd = async (req: Request, res: Response) => {
   try {
     const { adId } = req.body;

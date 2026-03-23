@@ -1,6 +1,88 @@
 import { Request, Response } from 'express';
-import { getSellerRequests, updateSellerRequest, updateUserRole } from './users.model';
+import { getSellerRequests, updateSellerRequest, updateUserRole, createSellerRequest } from './users.model';
 import prisma from '../../../prisma/client';
+import bcrypt from 'bcryptjs';
+
+export const requestSellerRole = async (req: Request, res: Response) => {
+  try {
+    const userId = parseInt((req as any).user.id);
+
+    // Vérifier si l'utilisateur existe
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    }
+
+    // Vérifier si l'utilisateur a déjà une demande en attente
+    const existingRequest = await prisma.sellerRequest.findFirst({
+      where: {
+        userId,
+        status: 'pending'
+      }
+    });
+
+    if (existingRequest) {
+      return res.status(400).json({ error: 'Vous avez déjà une demande en attente' });
+    }
+
+    // Mettre à jour le rôle et le statut de l'utilisateur
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        role: 'pending_seller',
+        status: 'pending_verification'
+      }
+    });
+
+    // Créer une demande de vendeur
+    await createSellerRequest({
+      userId,
+      reason: 'Demande pour devenir vendeur depuis le profil'
+    });
+
+    res.json({
+      message: 'Votre demande de vendeur a été soumise. Elle sera examinée par un administrateur.'
+    });
+  } catch (error) {
+    console.error('Erreur lors de la demande de vendeur:', error);
+    res.status(500).json({ error: 'Erreur lors de la demande de vendeur' });
+  }
+};
+
+export const changePassword = async (req: Request, res: Response) => {
+  try {
+    const userId = parseInt((req as any).user.id);
+    const { currentPassword, newPassword } = req.body;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    }
+
+    const passwordMatches = await bcrypt.compare(currentPassword, user.password);
+    if (!passwordMatches) {
+      return res.status(400).json({ error: 'Le mot de passe actuel est incorrect' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword }
+    });
+
+    res.json({ message: 'Mot de passe mis à jour avec succès' });
+  } catch (error) {
+    console.error('Erreur lors du changement de mot de passe:', error);
+    res.status(500).json({ error: 'Erreur lors du changement de mot de passe' });
+  }
+};
 
 export const getPendingSellerRequests = async (req: Request, res: Response) => {
   try {
