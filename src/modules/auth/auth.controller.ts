@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { Prisma } from '@prisma/client';
 import { createUser, findUserByEmail, createSellerRequest } from '../users/users.model';
 
 export const register = async (req: Request, res: Response) => {
@@ -43,6 +44,10 @@ export const register = async (req: Request, res: Response) => {
          : 'Compte créé avec succès.'
      });
    } catch (error) {
+     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+       return res.status(409).json({ error: 'Cet email est déjà utilisé' });
+     }
+
      console.error('Erreur lors de l\'inscription:', error);
      res.status(500).json({ error: 'Erreur lors de l\'inscription' });
    }

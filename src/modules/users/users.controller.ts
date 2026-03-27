@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { getSellerRequests, updateSellerRequest, updateUserRole, createSellerRequest } from './users.model';
 import prisma from '../../../prisma/client';
 import bcrypt from 'bcryptjs';
@@ -16,37 +17,46 @@ export const requestSellerRole = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Utilisateur non trouvé' });
     }
 
-    // Vérifier si l'utilisateur a déjà une demande en attente
-    const existingRequest = await prisma.sellerRequest.findFirst({
-      where: {
-        userId,
-        status: 'pending'
+    await prisma.$transaction(async (tx) => {
+      const existingRequest = await tx.sellerRequest.findFirst({
+        where: {
+          userId,
+          status: 'pending'
+        }
+      });
+
+      if (existingRequest) {
+        throw new Error('PENDING_SELLER_REQUEST_EXISTS');
       }
-    });
 
-    if (existingRequest) {
-      return res.status(400).json({ error: 'Vous avez déjà une demande en attente' });
-    }
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          role: 'pending_seller',
+          status: 'pending_verification'
+        }
+      });
 
-    // Mettre à jour le rôle et le statut de l'utilisateur
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        role: 'pending_seller',
-        status: 'pending_verification'
-      }
-    });
-
-    // Créer une demande de vendeur
-    await createSellerRequest({
-      userId,
-      reason: 'Demande pour devenir vendeur depuis le profil'
+      await tx.sellerRequest.create({
+        data: {
+          userId,
+          reason: 'Demande pour devenir vendeur depuis le profil'
+        }
+      });
     });
 
     res.json({
       message: 'Votre demande de vendeur a été soumise. Elle sera examinée par un administrateur.'
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'PENDING_SELLER_REQUEST_EXISTS') {
+      return res.status(400).json({ error: 'Vous avez déjà une demande en attente' });
+    }
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return res.status(400).json({ error: 'Vous avez déjà une demande en attente' });
+    }
+
     console.error('Erreur lors de la demande de vendeur:', error);
     res.status(500).json({ error: 'Erreur lors de la demande de vendeur' });
   }
